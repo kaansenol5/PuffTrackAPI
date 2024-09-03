@@ -3,11 +3,9 @@ const { Sequelize, DataTypes } = require("sequelize");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const http = require("http");
-const socketIo = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
 
 // Middleware
 app.use(express.json());
@@ -134,7 +132,6 @@ app.post("/puff", auth, async (req, res) => {
       timestamp: new Date(),
       UserId: req.user.id,
     });
-    io.emit("puff", { userId: req.user.id, timestamp: puff.timestamp });
     res.status(201).send(puff);
   } catch (error) {
     res.status(400).send(error);
@@ -283,15 +280,6 @@ app.get("/friends", auth, async (req, res) => {
   } catch (error) {
     res.status(500).send(error);
   }
-});
-
-// Socket.IO connection
-io.on("connection", (socket) => {
-  console.log("A user connected");
-
-  socket.on("disconnect", () => {
-    console.log("User disconnected");
-  });
 });
 
 // Start server

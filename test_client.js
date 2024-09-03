@@ -1,10 +1,8 @@
 // File: test_client.js
 
 const axios = require("axios");
-const io = require("socket.io-client");
 
 const API_URL = "http://localhost:3000";
-const SOCKET_URL = "http://localhost:3000";
 
 let user1Token, user2Token;
 
@@ -44,10 +42,7 @@ async function runTest() {
     console.log("User 1 friends:", user1Friends);
 
     // Set up real-time puff listening for User 2
-    const socket = io(SOCKET_URL);
-    socket.on("puff", (data) => {
-      console.log("Real-time puff received:", data);
-    });
+    //
 
     // Record a puff for User 1 (should be received by User 2 in real-time)
     await recordPuff(user1Token);
