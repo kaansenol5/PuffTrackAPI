@@ -282,6 +282,50 @@ app.get("/friends", auth, async (req, res) => {
   }
 });
 
+app.get("/me", auth, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.user.id, {
+      attributes: ["id", "name", "email"],
+      include: [
+        {
+          model: User,
+          as: "Friends",
+          attributes: ["id", "name", "email"],
+          through: { attributes: ["status"] },
+        },
+        {
+          model: Puff,
+          attributes: ["id", "timestamp"],
+        },
+      ],
+    });
+
+    if (!user) {
+      return res.status(404).send({ error: "User not found" });
+    }
+
+    const formattedFriends = user.Friends.map((friend) => ({
+      id: friend.id,
+      name: friend.name,
+      email: friend.email,
+      status: friend.Friend.status,
+      isMutual: friend.Friend.status === "accepted",
+    }));
+
+    const userData = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      friends: formattedFriends,
+      puffs: user.Puffs,
+    };
+
+    res.send(userData);
+  } catch (error) {
+    res.status(500).send({ error: "Error retrieving user data" });
+  }
+});
+
 // Start server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
