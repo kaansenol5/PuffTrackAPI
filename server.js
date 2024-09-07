@@ -15,6 +15,7 @@ const sequelize = new Sequelize("pufftrack", "kaansenol", "", {
   host: "localhost",
   dialect: "postgres",
   port: 5432,
+  logging: false,
 });
 
 // Test the connection
@@ -68,7 +69,7 @@ User.belongsToMany(User, {
 
 // Sync models with database
 sequelize
-  .sync({ force: true }) // Note: Using force: true will drop existing tables. Remove in production.
+  .sync({}) // Note: Using force: true will drop existing tables. Remove in production.
   .then(() => console.log("Database synchronized"))
   .catch((err) => console.error("Error synchronizing database", err));
 
@@ -115,6 +116,8 @@ app.post("/login", async (req, res) => {
     const { email, password } = req.body;
     const user = await User.findOne({ where: { email } });
     if (!user || !(await bcrypt.compare(password, user.password))) {
+      console.log("invalid login");
+
       return res.status(401).send({ error: "Invalid login credentials" });
     }
     const token = jwt.sign({ id: user.id }, "your_jwt_secret", {
@@ -139,39 +142,79 @@ app.post("/puff", auth, async (req, res) => {
 });
 
 app.get("/puffs", auth, async (req, res) => {
+  console.log("puffs");
   try {
-    const userId = req.query.userId || req.user.id;
+    const friendIds = await getFriendIds(req.user.id);
+    const userIds = [req.user.id, ...friendIds];
 
-    if (userId != req.user.id) {
-      const friendship = await Friend.findOne({
-        where: {
-          userId: req.user.id,
-          friendId: userId,
-          status: "accepted",
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const summary = await User.findAll({
+      where: { id: userIds },
+      attributes: ["id", "name"],
+      include: [
+        {
+          model: Puff,
+          attributes: [
+            [sequelize.fn("COUNT", sequelize.col("Puffs.id")), "totalPuffs"],
+            [
+              sequelize.fn(
+                "COUNT",
+                sequelize.literal(
+                  'CASE WHEN "Puffs"."timestamp" >= :today THEN 1 END',
+                ),
+              ),
+              "puffsToday",
+            ],
+          ],
         },
-      });
+      ],
+      group: ["User.id"],
+      raw: true,
+      nest: true,
+      replacements: { today },
+    });
 
-      const reverseFriendship = await Friend.findOne({
-        where: {
-          userId: userId,
-          friendId: req.user.id,
-          status: "accepted",
-        },
-      });
+    const result = await Promise.all(
+      summary.map(async (user) => {
+        const firstPuff = await Puff.findOne({
+          where: { UserId: user.id },
+          order: [["timestamp", "ASC"]],
+        });
 
-      if (!friendship || !reverseFriendship) {
-        return res
-          .status(403)
-          .send({ error: "Not authorized to view this user's puffs" });
-      }
-    }
+        let avgPuffsPerDay = 0;
+        if (firstPuff) {
+          const daysSinceFirstPuff = Math.max(
+            1,
+            Math.ceil(
+              (new Date() - firstPuff.timestamp) / (1000 * 60 * 60 * 24),
+            ),
+          );
+          avgPuffsPerDay = user.Puffs.totalPuffs / daysSinceFirstPuff;
+        }
 
-    const puffs = await Puff.findAll({ where: { UserId: userId } });
-    res.status(200).send(puffs);
+        return {
+          id: user.id,
+          name: user.name,
+          puffsToday: parseInt(user.Puffs.puffsToday),
+          avgPuffsPerDay: parseFloat(avgPuffsPerDay.toFixed(2)),
+        };
+      }),
+    );
+
+    res.status(200).send(result);
   } catch (error) {
     res.status(500).send(error);
   }
 });
+
+app.get("/validate-token", auth, (req, res) => {
+  console.log("token validate");
+  // If the middleware passes, the token is valid
+  res.send({ token: "valid" });
+});
+
 app.post("/friends/add", auth, async (req, res) => {
   try {
     const friend = await User.findByPk(req.body.friendId);
@@ -262,6 +305,7 @@ app.get("/debug", async (req, res) => {
 });
 
 app.get("/friends", auth, async (req, res) => {
+  console.log("friends");
   try {
     const friends = await req.user.getFriends({
       attributes: ["id", "name", "email"],
@@ -279,6 +323,66 @@ app.get("/friends", auth, async (req, res) => {
     res.send(formattedFriends);
   } catch (error) {
     res.status(500).send(error);
+  }
+});
+
+app.get("/incoming-requests", auth, async (req, res) => {
+  console.log("incoming");
+  try {
+    const incomingRequests = await Friend.findAll({
+      where: {
+        friendId: req.user.id,
+        status: "pending",
+      },
+      include: [
+        {
+          model: User,
+          as: "User",
+          attributes: ["id", "name"],
+        },
+      ],
+    });
+
+    const formattedRequests = incomingRequests.map((request) => ({
+      id: request.User.id,
+      name: request.User.name,
+    }));
+
+    res.send(formattedRequests);
+  } catch (error) {
+    res
+      .status(500)
+      .send({ error: "Error retrieving incoming friend requests" });
+  }
+});
+
+app.get("/outgoing-requests", auth, async (req, res) => {
+  console.log("outgoing");
+  try {
+    const outgoingRequests = await Friend.findAll({
+      where: {
+        userId: req.user.id,
+        status: "pending",
+      },
+      include: [
+        {
+          model: User,
+          as: "Friend",
+          attributes: ["id", "name"],
+        },
+      ],
+    });
+
+    const formattedRequests = outgoingRequests.map((request) => ({
+      id: request.Friend.id,
+      name: request.Friend.name,
+    }));
+
+    res.send(formattedRequests);
+  } catch (error) {
+    res
+      .status(500)
+      .send({ error: "Error retrieving outgoing friend requests" });
   }
 });
 
