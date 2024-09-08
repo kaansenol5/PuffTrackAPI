@@ -170,6 +170,30 @@ app.post("/puff", auth, async (req, res) => {
   }
 });
 
+app.post("/add-puffs", auth, async (req, res) => {
+  try {
+    const { timestamps } = req.body;
+
+    if (!Array.isArray(timestamps) || timestamps.length === 0) {
+      return res.status(400).send({ error: "Invalid timestamps array" });
+    }
+
+    const puffs = await Promise.all(
+      timestamps.map(async (timestamp) => {
+        return await Puff.create({
+          timestamp: new Date(timestamp),
+          UserId: req.user.id,
+        });
+      }),
+    );
+
+    res.status(201).send({ message: "Puffs added successfully", puffs });
+  } catch (error) {
+    console.error("Error in /add-puffs route:", error);
+    res.status(400).send({ error: "Error adding puffs" });
+  }
+});
+
 app.post("/friends/add", auth, async (req, res) => {
   try {
     const friend = await User.findByPk(req.body.friendId);
