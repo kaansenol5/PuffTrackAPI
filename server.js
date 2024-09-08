@@ -10,12 +10,35 @@ const server = http.createServer(app);
 // Middleware
 app.use(express.json());
 
+app.use((req, res, next) => {
+  // Log the incoming request
+  console.log(`\n--- Incoming Request ---`);
+  console.log(`${req.method} ${req.url}`);
+  console.log("Headers:", req.headers);
+  console.log("Query Parameters:", req.query);
+  console.log("Body:", req.body);
+  console.log("------------------------");
+
+  // Capture the response
+  const originalJson = res.json;
+  res.json = function (body) {
+    console.log(`\n--- Outgoing Response ---`);
+    console.log(`${req.method} ${req.url}`);
+    console.log(`Status Code: ${res.statusCode}`);
+    console.log("Headers:", res.getHeaders());
+    console.log("Body:", body);
+    console.log("-------------------------");
+    originalJson.call(this, body);
+  };
+
+  next();
+});
+
 // PostgreSQL connection
 const sequelize = new Sequelize("pufftrack", "kaansenol", "", {
   host: "localhost",
   dialect: "postgres",
   port: 5432,
-  logging: false,
 });
 
 // Test the connection
@@ -65,6 +88,12 @@ User.belongsToMany(User, {
   through: Friend,
   foreignKey: "userId",
   otherKey: "friendId",
+});
+User.belongsToMany(User, {
+  as: "FriendRequests",
+  through: Friend,
+  foreignKey: "friendId",
+  otherKey: "userId",
 });
 
 // Sync models with database
@@ -139,80 +168,6 @@ app.post("/puff", auth, async (req, res) => {
   } catch (error) {
     res.status(400).send(error);
   }
-});
-
-app.get("/puffs", auth, async (req, res) => {
-  console.log("puffs");
-  try {
-    const friendIds = await getFriendIds(req.user.id);
-    const userIds = [req.user.id, ...friendIds];
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const summary = await User.findAll({
-      where: { id: userIds },
-      attributes: ["id", "name"],
-      include: [
-        {
-          model: Puff,
-          attributes: [
-            [sequelize.fn("COUNT", sequelize.col("Puffs.id")), "totalPuffs"],
-            [
-              sequelize.fn(
-                "COUNT",
-                sequelize.literal(
-                  'CASE WHEN "Puffs"."timestamp" >= :today THEN 1 END',
-                ),
-              ),
-              "puffsToday",
-            ],
-          ],
-        },
-      ],
-      group: ["User.id"],
-      raw: true,
-      nest: true,
-      replacements: { today },
-    });
-
-    const result = await Promise.all(
-      summary.map(async (user) => {
-        const firstPuff = await Puff.findOne({
-          where: { UserId: user.id },
-          order: [["timestamp", "ASC"]],
-        });
-
-        let avgPuffsPerDay = 0;
-        if (firstPuff) {
-          const daysSinceFirstPuff = Math.max(
-            1,
-            Math.ceil(
-              (new Date() - firstPuff.timestamp) / (1000 * 60 * 60 * 24),
-            ),
-          );
-          avgPuffsPerDay = user.Puffs.totalPuffs / daysSinceFirstPuff;
-        }
-
-        return {
-          id: user.id,
-          name: user.name,
-          puffsToday: parseInt(user.Puffs.puffsToday),
-          avgPuffsPerDay: parseFloat(avgPuffsPerDay.toFixed(2)),
-        };
-      }),
-    );
-
-    res.status(200).send(result);
-  } catch (error) {
-    res.status(500).send(error);
-  }
-});
-
-app.get("/validate-token", auth, (req, res) => {
-  console.log("token validate");
-  // If the middleware passes, the token is valid
-  res.send({ token: "valid" });
 });
 
 app.post("/friends/add", auth, async (req, res) => {
@@ -304,88 +259,6 @@ app.get("/debug", async (req, res) => {
   }
 });
 
-app.get("/friends", auth, async (req, res) => {
-  console.log("friends");
-  try {
-    const friends = await req.user.getFriends({
-      attributes: ["id", "name", "email"],
-      through: { attributes: ["status"] },
-    });
-
-    const formattedFriends = friends.map((friend) => ({
-      id: friend.id,
-      name: friend.name,
-      email: friend.email,
-      status: friend.Friend.status,
-      isMutual: friend.Friend.status === "accepted",
-    }));
-
-    res.send(formattedFriends);
-  } catch (error) {
-    res.status(500).send(error);
-  }
-});
-
-app.get("/incoming-requests", auth, async (req, res) => {
-  console.log("incoming");
-  try {
-    const incomingRequests = await Friend.findAll({
-      where: {
-        friendId: req.user.id,
-        status: "pending",
-      },
-      include: [
-        {
-          model: User,
-          as: "User",
-          attributes: ["id", "name"],
-        },
-      ],
-    });
-
-    const formattedRequests = incomingRequests.map((request) => ({
-      id: request.User.id,
-      name: request.User.name,
-    }));
-
-    res.send(formattedRequests);
-  } catch (error) {
-    res
-      .status(500)
-      .send({ error: "Error retrieving incoming friend requests" });
-  }
-});
-
-app.get("/outgoing-requests", auth, async (req, res) => {
-  console.log("outgoing");
-  try {
-    const outgoingRequests = await Friend.findAll({
-      where: {
-        userId: req.user.id,
-        status: "pending",
-      },
-      include: [
-        {
-          model: User,
-          as: "Friend",
-          attributes: ["id", "name"],
-        },
-      ],
-    });
-
-    const formattedRequests = outgoingRequests.map((request) => ({
-      id: request.Friend.id,
-      name: request.Friend.name,
-    }));
-
-    res.send(formattedRequests);
-  } catch (error) {
-    res
-      .status(500)
-      .send({ error: "Error retrieving outgoing friend requests" });
-  }
-});
-
 app.get("/me", auth, async (req, res) => {
   try {
     const user = await User.findByPk(req.user.id, {
@@ -394,6 +267,12 @@ app.get("/me", auth, async (req, res) => {
         {
           model: User,
           as: "Friends",
+          attributes: ["id", "name", "email"],
+          through: { attributes: ["status"] },
+        },
+        {
+          model: User,
+          as: "FriendRequests",
           attributes: ["id", "name", "email"],
           through: { attributes: ["status"] },
         },
@@ -408,24 +287,79 @@ app.get("/me", auth, async (req, res) => {
       return res.status(404).send({ error: "User not found" });
     }
 
-    const formattedFriends = user.Friends.map((friend) => ({
-      id: friend.id,
-      name: friend.name,
-      email: friend.email,
-      status: friend.Friend.status,
-      isMutual: friend.Friend.status === "accepted",
-    }));
+    const incomingRequests = user.FriendRequests.filter(
+      (fr) => fr.Friend.status === "pending",
+    ).map((fr) => ({ id: fr.id, name: fr.name }));
+
+    const outgoingRequests = user.Friends.filter(
+      (f) => f.Friend.status === "pending",
+    ).map((f) => ({ id: f.id, name: f.name }));
+
+    const formattedFriends = await Promise.all(
+      user.Friends.filter((f) => f.Friend.status === "accepted").map(
+        async (friend) => {
+          const reverseFriendship = await Friend.findOne({
+            where: { userId: friend.id, friendId: user.id, status: "accepted" },
+          });
+
+          if (reverseFriendship) {
+            const friendData = {
+              id: friend.id,
+              name: friend.name,
+              email: friend.email,
+              status: "accepted",
+              isMutual: true,
+            };
+
+            const friendPuffs = await Puff.findAll({
+              where: { UserId: friend.id },
+              attributes: ["timestamp"],
+            });
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const puffSummary = {
+              totalPuffs: friendPuffs.length,
+              puffsToday: friendPuffs.filter((puff) => puff.timestamp >= today)
+                .length,
+              avgPuffsPerDay: 0,
+            };
+
+            if (friendPuffs.length > 0) {
+              const firstPuffDate = new Date(
+                Math.min(...friendPuffs.map((puff) => puff.timestamp)),
+              );
+              const daysSinceFirstPuff = Math.max(
+                1,
+                Math.ceil((today - firstPuffDate) / (1000 * 60 * 60 * 24)),
+              );
+              puffSummary.avgPuffsPerDay = parseFloat(
+                (puffSummary.totalPuffs / daysSinceFirstPuff).toFixed(2),
+              );
+            }
+
+            friendData.puffSummary = puffSummary;
+            return friendData;
+          }
+          return null;
+        },
+      ),
+    );
 
     const userData = {
       id: user.id,
       name: user.name,
       email: user.email,
-      friends: formattedFriends,
+      friends: formattedFriends.filter(Boolean),
+      incomingRequests,
+      outgoingRequests,
       puffs: user.Puffs,
     };
 
     res.send(userData);
   } catch (error) {
+    console.error("Error in /me route:", error);
     res.status(500).send({ error: "Error retrieving user data" });
   }
 });
