@@ -6,9 +6,12 @@ const http = require("http");
 const db = require("./db");
 const socketManager = require("./socketmanager");
 const app = express();
-var expressWs = require("express-ws")(app);
 const server = http.createServer(app);
+
+const setupSocket = require("./socket");
+
 const routes = require("./routes");
+const socketIo = require("socket.io");
 
 // Middleware
 app.use(express.json());
@@ -37,6 +40,10 @@ app.use((req, res, next) => {
 
   next();
 });
+
+const jwt_secret = "secret";
+
+const io = setupAuthenticatedSocket(server, jwt_secret);
 
 app.use("/", routes);
 

@@ -3,6 +3,7 @@ const db = require("./db");
 const router = express.Router();
 const auth = require("./middleware");
 const jwt = require("jsonwebtoken");
+
 router.get("/", (req, res) => {
   res.send("PuffTrack API");
 });
@@ -12,7 +13,7 @@ router.post("/register", async (req, res) => {
   try {
     const { name, email, password } = req.body;
     const user = await db.createUser(name, email, password);
-    const token = jwt.sign({ id: user.id }, "your_jwt_secret", {
+    const token = jwt.sign({ id: user.id }, "secret", {
       expiresIn: "1d",
     }); // Expires in 1 minute for testing
     res.status(201).send({ user, token });
@@ -26,7 +27,7 @@ router.post("/login", async (req, res) => {
     const { email, password } = req.body;
     const user = await db.login(email, password);
     if (user) {
-      const token = jwt.sign({ id: user.id }, "your_jwt_secret", {
+      const token = jwt.sign({ id: user.id }, "secret", {
         expiresIn: "1m",
       }); // Expires in 1 minute for testing
       res.send({ user, token });
