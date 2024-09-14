@@ -160,6 +160,80 @@ const db = {
     }
   },
 
+  async getFriendsPuffSummaries(userId) {
+    try {
+      const friends = await this.getFriends(userId);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+
+      const friendSummaries = await Promise.all(
+        friends.map(async (friend) => {
+          const puffs = await Puff.findAll({
+            where: { UserId: friend.id },
+            order: [["timestamp", "DESC"]],
+          });
+
+          const puffsToday = puffs.filter(
+            (puff) => puff.timestamp >= today,
+          ).length;
+          const puffsYesterday = puffs.filter(
+            (puff) => puff.timestamp >= yesterday && puff.timestamp < today,
+          ).length;
+
+          const totalPuffs = puffs.length;
+          const firstPuffDate =
+            puffs.length > 0 ? puffs[puffs.length - 1].timestamp : today;
+          const daysSinceFirstPuff = Math.max(
+            1,
+            Math.ceil((today - firstPuffDate) / (1000 * 60 * 60 * 24)),
+          );
+          const averagePuffsPerDay = totalPuffs / daysSinceFirstPuff;
+
+          const changePercentage =
+            puffsYesterday === 0
+              ? puffsToday === 0
+                ? 0
+                : 100
+              : ((puffsToday - puffsYesterday) / puffsYesterday) * 100;
+
+          let pufflessDayStreak = 0;
+          if (puffsToday === 0) {
+            for (let i = 0; i < puffs.length; i++) {
+              const puffDate = new Date(puffs[i].timestamp);
+              puffDate.setHours(0, 0, 0, 0);
+              const daysDifference = Math.floor(
+                (today - puffDate) / (1000 * 60 * 60 * 24),
+              );
+              if (daysDifference === pufflessDayStreak) {
+                pufflessDayStreak++;
+              } else {
+                break;
+              }
+            }
+          }
+
+          return {
+            name: friend.name,
+            id: friend.id,
+            puffSummaries: {
+              puffsToday,
+              averagePuffsPerDay: averagePuffsPerDay.toFixed(2),
+              changePercentage: changePercentage.toFixed(2),
+              pufflessDayStreak,
+            },
+          };
+        }),
+      );
+
+      return friendSummaries;
+    } catch (error) {
+      console.error("Error getting friends' puff summaries:", error);
+      throw error;
+    }
+  },
+
   // Friend request functions
   async sendFriendRequest(senderId, receiverId) {
     try {
@@ -186,6 +260,62 @@ const db = {
       return requests;
     } catch (error) {
       console.error("Error getting friend requests:", error);
+      throw error;
+    }
+  },
+  async getFriendRequestSender(requestId) {
+    try {
+      const request = await FriendRequest.findByPk(requestId, {
+        include: [{ model: User, as: "User" }],
+      });
+
+      if (!request) {
+        return null; // Friend request not found
+      }
+
+      // Return the user who sent the request (the sender)
+      return request.User;
+    } catch (error) {
+      console.error("Error getting friend request sender:", error);
+      throw error;
+    }
+  },
+
+  async getFullSync(userId) {
+    try {
+      const user = await this.getUserById(userId);
+      const friends = await this.getFriends(userId);
+      const receivedFriendRequests = await this.getFriendRequests(userId);
+      const sentFriendRequests = await this.getSentFriendRequests(userId);
+      const friendPuffSummaries = await this.getFriendsPuffSummaries(userId);
+
+      return {
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+        },
+        friends: friends.map((friend) => ({
+          id: friend.id,
+          name: friend.name,
+          email: friend.email,
+        })),
+        sentFriendRequests: sentFriendRequests.map((request) => ({
+          id: request.id,
+          receiverId: request.Friend.id,
+          receiverName: request.Friend.name,
+          receiverEmail: request.Friend.email,
+        })),
+        receivedFriendRequests: receivedFriendRequests.map((request) => ({
+          id: request.id,
+          senderId: request.User.id,
+          senderName: request.User.name,
+          senderEmail: request.User.email,
+        })),
+        friendPuffSummaries,
+      };
+    } catch (error) {
+      console.error("Error getting full friend sync:", error);
       throw error;
     }
   },

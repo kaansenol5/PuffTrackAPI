@@ -8,7 +8,7 @@ const socketManager = require("./socketmanager");
 const app = express();
 const server = http.createServer(app);
 
-const setupSocket = require("./socket");
+const setupAuthenticatedSocket = require("./socket");
 
 const routes = require("./routes");
 const socketIo = require("socket.io");
