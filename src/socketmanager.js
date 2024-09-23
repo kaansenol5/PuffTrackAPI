@@ -1,4 +1,3 @@
-const WebSocket = require("ws");
 const db = require("./db"); // Import our database functions
 
 class SocketManager {
@@ -10,7 +9,7 @@ class SocketManager {
     // Verify the user exists in the database
     const user = await db.getUserById(userId);
     if (!user) {
-      socket.close(1008, "User not found");
+      socket.disconnect(true); // Disconnect the socket
       return;
     }
 
@@ -24,7 +23,7 @@ class SocketManager {
     console.log(`User ${userId} connected`);
 
     // Set up disconnect handler
-    socket.on("close", () => SocketManager.handleDisconnection(socket));
+    socket.on("disconnect", () => SocketManager.handleDisconnection(socket));
   }
 
   static handleDisconnection(socket) {
@@ -41,7 +40,7 @@ class SocketManager {
     if (existingSocket) {
       SocketManager.socketUserMap.delete(existingSocket);
       SocketManager.userSocketMap.delete(userId);
-      existingSocket.close(1000, "New connection established");
+      existingSocket.disconnect(true); // Force disconnect
     }
   }
 
@@ -54,18 +53,18 @@ class SocketManager {
   }
 
   // Send a message to a specific user
-  static sendToUser(userId, message) {
+  static sendToUser(userId, event, data) {
     const socket = SocketManager.getUserSocket(userId);
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify(message));
+    if (socket && socket.connected) {
+      socket.emit(event, data);
     }
   }
 
   // Broadcast a message to all connected users
-  static broadcastMessage(message) {
+  static broadcastMessage(event, data) {
     SocketManager.userSocketMap.forEach((socket, userId) => {
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify(message));
+      if (socket.connected) {
+        socket.emit(event, data);
       }
     });
   }

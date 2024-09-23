@@ -5,67 +5,105 @@ const db = require("./db");
 
 function setupAuthenticatedSocket(server, jwtSecret) {
   const io = socketIo(server);
-
-  // Middleware to authenticate socket connections
   io.use((socket, next) => {
-    if (socket.handshake.auth && socket.handshake.auth.token) {
-      jwt.verify(socket.handshake.auth.token, jwtSecret, (err, decoded) => {
-        if (err) return next(new Error("Authentication error"));
+    const originalEmit = socket.emit;
 
-        // Store the entire decoded token
+    socket.emit = function (eventName, ...args) {
+      console.log(`[${new Date().toISOString()}] Emitting event: ${eventName}`);
+      console.log("Event data:", JSON.stringify(args, null, 2));
+      originalEmit.apply(this, [eventName, ...args]);
+    };
+
+    socket.onAny((eventName, ...args) => {
+      console.log(`[${new Date().toISOString()}] Received event: ${eventName}`);
+      console.log("Event data:", JSON.stringify(args, null, 2));
+    });
+
+    next();
+  });
+  // Middleware to authenticate socket connections
+  io.use(async (socket, next) => {
+    const token = socket.handshake.query.token;
+    if (token) {
+      try {
+        const decoded = await new Promise((resolve, reject) => {
+          jwt.verify(token, jwtSecret, (err, decoded) => {
+            if (err) reject(err);
+            else resolve(decoded);
+          });
+        });
+
         socket.decoded = decoded;
+        socket.userId = decoded.id;
 
-        // Extract and store the user ID for easy access
-        socket.userId = decoded.id; // Assuming the user ID is stored in the 'id' field of the JWT payload
-
-        next();
-      });
+        const userExists = await db.userExists(decoded.id);
+        if (userExists) {
+          next();
+        } else {
+          return next(new Error("User does not exist"));
+        }
+      } catch (err) {
+        return next(new Error("Authentication error"));
+      }
     } else {
-      next(new Error("Authentication error"));
+      return next(new Error("Authentication error"));
     }
   });
 
-  io.on("connection", (socket) => {
+  io.on("connection", async (socket) => {
     console.log("Authenticated user connected. User ID:", socket.userId);
+    let sync = await db.getFullSync(socket.userId);
+    socket.emit("update", { sync: sync });
     socketmanager.handleConnection(socket, socket.userId);
     // Your socket event handlers here
-    socket.on("addFriend", (data) => {
-      const userId = socketmanager.getUserId(socket);
-      db.sendFriendRequest(userId, data.friendId);
-      socket.emit("update", { update: db.getFullSync(userId) });
-      let friendSocket = socketmanager.getUserSocket(data.friendId);
+    //
+
+    socket.on("addFriend", async (data) => {
+      const userId = await socketmanager.getUserId(socket);
+      await db.sendFriendRequest(userId, data.friendId);
+      if (userId == data.friendId) {
+        socket.emit("error");
+        return;
+      }
+      socket.emit("update", { sync: await db.getFullSync(userId) });
+      let friendSocket = await socketmanager.getUserSocket(data.friendId);
       if (friendSocket != undefined) {
-        io.to(friendSocket).emit("update", {
-          update: db.getFullSync(userId),
+        console.log("updating user");
+        friendSocket.emit("update", {
+          sync: await db.getFullSync(data.friendId),
         });
       }
     });
 
-    socket.on("acceptRequest", (data) => {
-      db.acceptFriendRequest(socketmanager.getUserId(socket), data.requestId);
-      const sender = db.getFriendRequestSender(data.requestId);
-      const senderSocket = socketmanager.getUserSocket(sender.id);
+    socket.on("acceptRequest", async (data) => {
+      await db.acceptFriendRequest(data.requestId);
+      const sender = await db.getFriendRequestSender(data.requestId);
+      const senderSocket = await socketmanager.getUserSocket(sender.id);
+      console.log("updating");
       socket.emit("update", {
-        update: db.getFullSync(socketmanager.getUserId(socket)),
+        sync: await db.getFullSync(socketmanager.getUserId(socket)),
       });
       if (senderSocket != undefined) {
-        io.to(senderSocket).emit("update", {
-          update: db.getFullSync(socketmanager.getUserId(socket)),
+        senderSocket.emit("update", {
+          sync: await db.getFullSync(socketmanager.getUserId(senderSocket)),
         });
       }
     });
 
-    socket.on("addPuffs", (data) => {
+    socket.on("addPuffs", async (data) => {
+      console.log("adding puffs");
       const puffs = data.puffs;
-      const userId = socketmanager.getUserId(socket);
-      for (let timestamp in puffs) {
-        db.addPuff(userId, timestamp);
+      const userId = await socketmanager.getUserId(socket);
+      for (let timestamp of puffs) {
+        await db.addPuff(userId, new Date(timestamp * 1000)); // Convert to JavaScript Date object
       }
-      const userFriends = db.getFriends(userId);
+      const userFriends = await db.getFriends(userId);
       for (let user of userFriends) {
-        const socketId = socketmanager.getUserSocket(user.id);
+        const socketId = await socketmanager.getUserSocket(user.id);
         if (socketId != undefined) {
-          io.to(socketId).emit("update", { update: db.getFullSync(user.id) });
+          socketId.emit("update", {
+            sync: await db.getFullSync(user.id),
+          });
         }
       }
     });

@@ -17,6 +17,7 @@ const socketIo = require("socket.io");
 app.use(express.json());
 db.init();
 
+/*
 app.use((req, res, next) => {
   // Log the incoming request
   console.log(`\n--- Incoming Request ---`);
@@ -40,7 +41,7 @@ app.use((req, res, next) => {
 
   next();
 });
-
+*/
 const jwt_secret = "secret";
 
 const io = setupAuthenticatedSocket(server, jwt_secret);
@@ -52,3 +53,5 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+
+module.exports = app;

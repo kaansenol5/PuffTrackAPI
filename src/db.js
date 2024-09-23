@@ -1,77 +1,69 @@
-const { Sequelize, DataTypes } = require("sequelize");
+const { Sequelize, DataTypes, Op } = require("sequelize");
 const bcrypt = require("bcryptjs");
+const { customAlphabet } = require("nanoid");
 
-// Initialize Sequelize with your database connection details
+const nanoid = customAlphabet("1234567890abcdefhjkmnpqrstuvwxyz", 6);
+
 const sequelize = new Sequelize("pufftrack", "kaansenol", null, {
   host: "localhost",
   dialect: "postgres",
 });
 
-// Define models
 const User = sequelize.define("User", {
   id: {
-    type: DataTypes.UUID,
-    defaultValue: Sequelize.UUIDV4,
+    type: DataTypes.STRING(6),
     primaryKey: true,
   },
-  name: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  email: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    unique: true,
-  },
-  password: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
+  name: { type: DataTypes.STRING, allowNull: false },
+  email: { type: DataTypes.STRING, allowNull: false, unique: true },
+  password: { type: DataTypes.STRING, allowNull: false },
 });
 
 const Puff = sequelize.define("Puff", {
   id: {
-    type: DataTypes.UUID,
-    defaultValue: Sequelize.UUIDV4,
+    type: DataTypes.STRING(6),
     primaryKey: true,
   },
-  timestamp: {
-    type: DataTypes.DATE,
-    allowNull: false,
-  },
+  timestamp: { type: DataTypes.DATE, allowNull: false },
+  UserId: { type: DataTypes.STRING(6), allowNull: false },
 });
 
 const FriendRequest = sequelize.define("FriendRequest", {
   id: {
-    type: DataTypes.UUID,
-    defaultValue: Sequelize.UUIDV4,
+    type: DataTypes.STRING(6),
     primaryKey: true,
   },
   status: {
     type: DataTypes.ENUM("pending", "accepted", "rejected"),
     defaultValue: "pending",
   },
-  UserId: {
-    type: DataTypes.UUID,
-    references: {
-      model: User,
-      key: "id",
-    },
-  },
-  FriendId: {
-    type: DataTypes.UUID,
-    references: {
-      model: User,
-      key: "id",
-    },
-  },
+  UserId: { type: DataTypes.STRING(6), allowNull: false },
+  FriendId: { type: DataTypes.STRING(6), allowNull: false },
 });
 
 // Set up associations
-User.hasMany(Puff);
-Puff.belongsTo(User);
+User.hasMany(Puff, { foreignKey: "UserId" });
+Puff.belongsTo(User, { foreignKey: "UserId" });
 
-User.belongsToMany(User, { as: "Friends", through: FriendRequest });
+User.hasMany(FriendRequest, { as: "SentFriendRequests", foreignKey: "UserId" });
+User.hasMany(FriendRequest, {
+  as: "ReceivedFriendRequests",
+  foreignKey: "FriendId",
+});
+
+FriendRequest.belongsTo(User, { as: "Sender", foreignKey: "UserId" });
+FriendRequest.belongsTo(User, { as: "Receiver", foreignKey: "FriendId" });
+
+// Utility function to generate unique IDs
+async function generateUniqueId(model) {
+  let id;
+  let exists = true;
+  while (exists) {
+    id = nanoid();
+    exists = await model.findByPk(id);
+  }
+  return id;
+}
 
 // Database functions
 const db = {
@@ -79,10 +71,28 @@ const db = {
   async createUser(name, email, password) {
     try {
       const hashedPassword = await bcrypt.hash(password, 10);
-      const user = await User.create({ name, email, password: hashedPassword });
+      const userId = await generateUniqueId(User);
+      const user = await User.create({
+        id: userId,
+        name,
+        email,
+        password: hashedPassword,
+      });
       return user;
     } catch (error) {
       console.error("Error creating user:", error);
+      throw error;
+    }
+  },
+  async userExists(userId) {
+    try {
+      const user = await User.findByPk(userId);
+      if (!user) {
+        console.log(userId + " does not exist");
+      }
+      return !!user; // Returns true if user exists, false otherwise
+    } catch (error) {
+      console.error("Error checking if user exists:", error);
       throw error;
     }
   },
@@ -113,21 +123,12 @@ const db = {
 
   async login(email, password) {
     try {
-      const user = await User.findOne({
-        where: { email },
-      });
-
-      if (!user) {
-        return null; // User not found
-      }
+      const user = await User.findOne({ where: { email } });
+      if (!user) return null;
 
       const isPasswordValid = await bcrypt.compare(password, user.password);
+      if (!isPasswordValid) return null;
 
-      if (!isPasswordValid) {
-        return null; // Password is incorrect
-      }
-
-      // If password is correct, return user object without password
       const { password: _, ...userWithoutPassword } = user.get({ plain: true });
       return userWithoutPassword;
     } catch (error) {
@@ -139,7 +140,12 @@ const db = {
   // Puff functions
   async addPuff(userId, timestamp) {
     try {
-      const puff = await Puff.create({ UserId: userId, timestamp });
+      const puffId = await generateUniqueId(Puff);
+      const puff = await Puff.create({
+        id: puffId,
+        UserId: userId,
+        timestamp,
+      });
       return puff;
     } catch (error) {
       console.error("Error adding puff:", error);
@@ -174,7 +180,9 @@ const db = {
             where: { UserId: friend.id },
             order: [["timestamp", "DESC"]],
           });
-
+          const totalPuffs = puffs.length;
+          const firstPuffDate =
+            puffs.length > 0 ? puffs[puffs.length - 1].timestamp : null;
           const puffsToday = puffs.filter(
             (puff) => puff.timestamp >= today,
           ).length;
@@ -182,9 +190,6 @@ const db = {
             (puff) => puff.timestamp >= yesterday && puff.timestamp < today,
           ).length;
 
-          const totalPuffs = puffs.length;
-          const firstPuffDate =
-            puffs.length > 0 ? puffs[puffs.length - 1].timestamp : today;
           const daysSinceFirstPuff = Math.max(
             1,
             Math.ceil((today - firstPuffDate) / (1000 * 60 * 60 * 24)),
@@ -199,24 +204,34 @@ const db = {
               : ((puffsToday - puffsYesterday) / puffsYesterday) * 100;
 
           let pufflessDayStreak = 0;
-          if (puffsToday === 0) {
-            for (let i = 0; i < puffs.length; i++) {
-              const puffDate = new Date(puffs[i].timestamp);
-              puffDate.setHours(0, 0, 0, 0);
-              const daysDifference = Math.floor(
-                (today - puffDate) / (1000 * 60 * 60 * 24),
-              );
-              if (daysDifference === pufflessDayStreak) {
+          if (puffsToday === 0 && firstPuffDate) {
+            let dayCounter = 1;
+            while (dayCounter <= 30) {
+              // Example limit
+              const dateToCheck = new Date(today);
+              dateToCheck.setDate(dateToCheck.getDate() - dayCounter);
+              const puffsOnDate = puffs.filter(
+                (puff) =>
+                  puff.timestamp >= dateToCheck &&
+                  puff.timestamp <
+                    new Date(dateToCheck.getTime() + 24 * 60 * 60 * 1000),
+              ).length;
+              if (puffsOnDate === 0) {
                 pufflessDayStreak++;
+                dayCounter++;
               } else {
                 break;
               }
             }
+          } else if (puffsToday === 0 && !firstPuffDate) {
+            // User has no puffs at all
+            pufflessDayStreak = 0; // Or set to a default value
           }
 
           return {
-            name: friend.name,
             id: friend.id,
+            name: friend.name,
+            email: friend.email,
             puffSummaries: {
               puffsToday,
               averagePuffsPerDay: averagePuffsPerDay.toFixed(2),
@@ -237,7 +252,9 @@ const db = {
   // Friend request functions
   async sendFriendRequest(senderId, receiverId) {
     try {
+      const requestId = await generateUniqueId(FriendRequest);
       const request = await FriendRequest.create({
+        id: requestId,
         UserId: senderId,
         FriendId: receiverId,
       });
@@ -255,67 +272,11 @@ const db = {
           FriendId: userId,
           status: "pending",
         },
-        include: [{ model: User, as: "User" }],
+        include: [{ model: User, as: "Sender" }],
       });
       return requests;
     } catch (error) {
       console.error("Error getting friend requests:", error);
-      throw error;
-    }
-  },
-  async getFriendRequestSender(requestId) {
-    try {
-      const request = await FriendRequest.findByPk(requestId, {
-        include: [{ model: User, as: "User" }],
-      });
-
-      if (!request) {
-        return null; // Friend request not found
-      }
-
-      // Return the user who sent the request (the sender)
-      return request.User;
-    } catch (error) {
-      console.error("Error getting friend request sender:", error);
-      throw error;
-    }
-  },
-
-  async getFullSync(userId) {
-    try {
-      const user = await this.getUserById(userId);
-      const friends = await this.getFriends(userId);
-      const receivedFriendRequests = await this.getFriendRequests(userId);
-      const sentFriendRequests = await this.getSentFriendRequests(userId);
-      const friendPuffSummaries = await this.getFriendsPuffSummaries(userId);
-
-      return {
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-        },
-        friends: friends.map((friend) => ({
-          id: friend.id,
-          name: friend.name,
-          email: friend.email,
-        })),
-        sentFriendRequests: sentFriendRequests.map((request) => ({
-          id: request.id,
-          receiverId: request.Friend.id,
-          receiverName: request.Friend.name,
-          receiverEmail: request.Friend.email,
-        })),
-        receivedFriendRequests: receivedFriendRequests.map((request) => ({
-          id: request.id,
-          senderId: request.User.id,
-          senderName: request.User.name,
-          senderEmail: request.User.email,
-        })),
-        friendPuffSummaries,
-      };
-    } catch (error) {
-      console.error("Error getting full friend sync:", error);
       throw error;
     }
   },
@@ -327,7 +288,7 @@ const db = {
           UserId: userId,
           status: "pending",
         },
-        include: [{ model: User, as: "Friend" }],
+        include: [{ model: User, as: "Receiver" }],
       });
       return requests;
     } catch (error) {
@@ -341,6 +302,7 @@ const db = {
       const request = await FriendRequest.findByPk(requestId);
       if (request) {
         await request.update({ status: "accepted" });
+        console.log("accepted request");
         return request;
       }
       return null;
@@ -350,20 +312,40 @@ const db = {
     }
   },
 
-  async getFriends(userId) {
+  async getFriendRequestSender(requestId) {
     try {
-      const user = await User.findByPk(userId, {
+      const request = await FriendRequest.findByPk(requestId, {
         include: [
-          {
-            model: User,
-            as: "Friends",
-            through: { where: { status: "accepted" } },
-          },
+          { model: User, as: "Sender", attributes: ["id", "name", "email"] },
         ],
       });
-      return user ? user.Friends : [];
+
+      if (!request) {
+        return null;
+      }
+
+      return request.Sender;
     } catch (error) {
-      console.error("Error getting friends:", error);
+      console.error("Error getting friend request sender:", error);
+      throw error;
+    }
+  },
+
+  async getFriendRequestReceiver(requestId) {
+    try {
+      const request = await FriendRequest.findByPk(requestId, {
+        include: [
+          { model: User, as: "Receiver", attributes: ["id", "name", "email"] },
+        ],
+      });
+
+      if (!request) {
+        return null;
+      }
+
+      return request.Receiver;
+    } catch (error) {
+      console.error("Error getting friend request receiver:", error);
       throw error;
     }
   },
@@ -372,16 +354,166 @@ const db = {
     try {
       const result = await FriendRequest.destroy({
         where: {
-          [Sequelize.Op.or]: [
+          status: "accepted",
+          [Op.or]: [
             { UserId: userId, FriendId: friendId },
             { UserId: friendId, FriendId: userId },
           ],
-          status: "accepted",
         },
       });
-      return result > 0; // Returns true if a friendship was removed, false otherwise
+      return result > 0;
     } catch (error) {
       console.error("Error removing friend:", error);
+      throw error;
+    }
+  },
+
+  async getFriends(userId) {
+    try {
+      const acceptedRequests = await FriendRequest.findAll({
+        where: {
+          status: "accepted",
+          [Op.or]: [{ UserId: userId }, { FriendId: userId }],
+        },
+      });
+
+      const friendIds = acceptedRequests.map((req) =>
+        req.UserId === userId ? req.FriendId : req.UserId,
+      );
+
+      const friends = await User.findAll({
+        where: { id: friendIds },
+      });
+
+      return friends;
+    } catch (error) {
+      console.error("Error getting friends:", error);
+      throw error;
+    }
+  },
+
+  async getFullSync(userId) {
+    try {
+      // Get user information
+      const user = await this.getUserById(userId);
+      // Get friends with puff summaries
+      const friendsPuffSummaries = await this.getFriendsPuffSummaries(userId);
+      // Get friend requests with Sender and Receiver details
+      const receivedFriendRequests = await FriendRequest.findAll({
+        where: {
+          FriendId: userId,
+          status: "pending",
+        },
+        include: [
+          {
+            model: User,
+            as: "Sender",
+            attributes: ["id", "name", "email"],
+          },
+          {
+            model: User,
+            as: "Receiver",
+            attributes: ["id", "name", "email"],
+          },
+        ],
+      });
+      const sentFriendRequests = await FriendRequest.findAll({
+        where: {
+          UserId: userId,
+          status: "pending",
+        },
+        include: [
+          {
+            model: User,
+            as: "Sender",
+            attributes: ["id", "name", "email"],
+          },
+          {
+            model: User,
+            as: "Receiver",
+            attributes: ["id", "name", "email"],
+          },
+        ],
+      });
+      // Format the friend requests to include Sender and Receiver
+      const formattedReceivedRequests = receivedFriendRequests.map(
+        (request) => ({
+          id: request.id,
+          status: request.status,
+          sender: request.Sender
+            ? {
+                id: request.Sender.id,
+                name: request.Sender.name,
+                email: request.Sender.email,
+              }
+            : null,
+          receiver: request.Receiver
+            ? {
+                id: request.Receiver.id,
+                name: request.Receiver.name,
+                email: request.Receiver.email,
+              }
+            : null,
+        }),
+      );
+      const formattedSentRequests = sentFriendRequests.map((request) => ({
+        id: request.id,
+        status: request.status,
+        sender: request.Sender
+          ? {
+              id: request.Sender.id,
+              name: request.Sender.name,
+              email: request.Sender.email,
+            }
+          : null,
+        receiver: request.Receiver
+          ? {
+              id: request.Receiver.id,
+              name: request.Receiver.name,
+              email: request.Receiver.email,
+            }
+          : null,
+      }));
+      console.log("FULL UPDATE " + user.id);
+      // Build the response
+      return {
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+        },
+        friends: friendsPuffSummaries.map((friend) => ({
+          id: friend.id,
+          name: friend.name,
+          email: friend.email,
+          puffsummary: friend.puffSummaries,
+        })),
+        sentFriendRequests: formattedSentRequests,
+        receivedFriendRequests: formattedReceivedRequests,
+      };
+    } catch (error) {
+      console.error("Error getting full sync:", error);
+      throw error;
+    }
+  },
+  async dumpDatabase() {
+    try {
+      const users = await User.findAll({
+        attributes: { exclude: ["password"] },
+        raw: true,
+      });
+
+      const puffs = await Puff.findAll({ raw: true });
+
+      const friendRequests = await FriendRequest.findAll({ raw: true });
+
+      return {
+        users,
+        puffs,
+        friendRequests,
+      };
+    } catch (error) {
+      console.error("Error dumping database:", error);
       throw error;
     }
   },

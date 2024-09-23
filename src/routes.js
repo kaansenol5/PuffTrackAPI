@@ -28,7 +28,7 @@ router.post("/login", async (req, res) => {
     const user = await db.login(email, password);
     if (user) {
       const token = jwt.sign({ id: user.id }, "secret", {
-        expiresIn: "1m",
+        expiresIn: "1d",
       }); // Expires in 1 minute for testing
       res.send({ user, token });
     } else {
@@ -39,8 +39,11 @@ router.post("/login", async (req, res) => {
   }
 });
 
+router.get("/debug", async (req, res) => {
+  res.status(200).send({ db: await db.dumpDatabase() });
+});
 router.post("/ping", auth, async (req, res) => {
-  res.status(200).send("pong");
+  res.status(200).send({ status: "pong" });
 });
 
 module.exports = router;
