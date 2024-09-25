@@ -146,9 +146,32 @@ const db = {
         UserId: userId,
         timestamp,
       });
+
+      // After adding a new puff, clean up old puffs
+      await this.cleanupOldPuffs(userId);
+
       return puff;
     } catch (error) {
       console.error("Error adding puff:", error);
+      throw error;
+    }
+  },
+
+  async cleanupOldPuffs(userId) {
+    try {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      await Puff.destroy({
+        where: {
+          UserId: userId,
+          timestamp: {
+            [Op.lt]: thirtyDaysAgo,
+          },
+        },
+      });
+    } catch (error) {
+      console.error("Error cleaning up old puffs:", error);
       throw error;
     }
   },
