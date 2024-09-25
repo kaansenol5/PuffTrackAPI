@@ -573,6 +573,17 @@ const db = {
       throw error;
     }
   },
+  async removeAllPuffs(userId) {
+    try {
+      const result = await Puff.destroy({
+        where: { UserId: userId },
+      });
+      return result;
+    } catch (error) {
+      console.error("Error removing all puffs:", error);
+      throw error;
+    }
+  },
 
   // Initialize database
   async init() {

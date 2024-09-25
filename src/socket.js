@@ -130,6 +130,27 @@ function setupAuthenticatedSocket(server) {
         }
       }),
     );
+    socket.on("removeAllPuffs", async () => {
+      const { error } = schemas.removeAllPuffs.validate({});
+      if (error) {
+        return socket.emit("error", { message: error.details[0].message });
+      }
+
+      try {
+        const userId = await socketmanager.getUserId(socket);
+        await db.removeAllPuffs(userId);
+
+        // Update the current user
+        socket.emit("update", { sync: await db.getFullSync(userId) });
+
+        socket.emit("allPuffsRemoved");
+      } catch (error) {
+        console.error("Error removing all puffs:", error);
+        socket.emit("error", {
+          message: "An error occurred while removing all puffs",
+        });
+      }
+    });
 
     socket.on(
       "acceptRequest",
