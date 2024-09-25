@@ -5,6 +5,8 @@ const db = require("./db");
 
 function setupAuthenticatedSocket(server, jwtSecret) {
   const io = socketIo(server);
+
+  // Middleware for logging
   io.use((socket, next) => {
     const originalEmit = socket.emit;
 
@@ -21,6 +23,7 @@ function setupAuthenticatedSocket(server, jwtSecret) {
 
     next();
   });
+
   // Middleware to authenticate socket connections
   io.use(async (socket, next) => {
     const token = socket.handshake.query.token;
@@ -55,14 +58,17 @@ function setupAuthenticatedSocket(server, jwtSecret) {
     let sync = await db.getFullSync(socket.userId);
     socket.emit("update", { sync: sync });
     socketmanager.handleConnection(socket, socket.userId);
-    // Your socket event handlers here
-    //
 
     socket.on("addFriend", async (data) => {
+      const { error } = schemas.addFriend.validate(data);
+      if (error) {
+        return socket.emit("error", { message: error.details[0].message });
+      }
+
       const userId = await socketmanager.getUserId(socket);
       await db.sendFriendRequest(userId, data.friendId);
       if (userId == data.friendId) {
-        socket.emit("error");
+        socket.emit("error", { message: "Cannot add yourself as a friend" });
         return;
       }
       socket.emit("update", { sync: await db.getFullSync(userId) });
@@ -76,6 +82,11 @@ function setupAuthenticatedSocket(server, jwtSecret) {
     });
 
     socket.on("acceptRequest", async (data) => {
+      const { error } = schemas.acceptRequest.validate(data);
+      if (error) {
+        return socket.emit("error", { message: error.details[0].message });
+      }
+
       await db.acceptFriendRequest(data.requestId);
       const sender = await db.getFriendRequestSender(data.requestId);
       const senderSocket = await socketmanager.getUserSocket(sender.id);
@@ -91,11 +102,16 @@ function setupAuthenticatedSocket(server, jwtSecret) {
     });
 
     socket.on("addPuffs", async (data) => {
+      const { error } = schemas.addPuffs.validate(data);
+      if (error) {
+        return socket.emit("error", { message: error.details[0].message });
+      }
+
       console.log("adding puffs");
       const puffs = data.puffs;
       const userId = await socketmanager.getUserId(socket);
       for (let timestamp of puffs) {
-        await db.addPuff(userId, new Date(timestamp * 1000)); // Convert to JavaScript Date object
+        await db.addPuff(userId, new Date(timestamp * 1000));
       }
       const userFriends = await db.getFriends(userId);
       for (let user of userFriends) {

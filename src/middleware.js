@@ -1,5 +1,7 @@
 const jwt = require("jsonwebtoken");
 const db = require("./db");
+const Joi = require("joi");
+
 // Authentication middleware
 const auth = async (req, res, next) => {
   try {
@@ -24,4 +26,14 @@ const auth = async (req, res, next) => {
   }
 };
 
-module.exports = auth;
+const validate = (schema) => {
+  return (req, res, next) => {
+    const { error } = schema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ error: error.details[0].message });
+    }
+    next();
+  };
+};
+
+module.exports = { auth, validate };
