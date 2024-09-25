@@ -12,6 +12,18 @@ const setupAuthenticatedSocket = require("./socket");
 
 const routes = require("./routes");
 const socketIo = require("socket.io");
+const rateLimit = require("express-rate-limit");
+
+// Create a limiter middleware
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+
+// Apply rate limiting to all routes
+app.use(apiLimiter);
 
 // Middleware
 app.use(express.json());
