@@ -562,6 +562,17 @@ const db = {
       throw error;
     }
   },
+  async getPuffCount(userId) {
+    try {
+      const count = await Puff.count({
+        where: { UserId: userId },
+      });
+      return count;
+    } catch (error) {
+      console.error("Error getting puff count:", error);
+      throw error;
+    }
+  },
 
   // Initialize database
   async init() {

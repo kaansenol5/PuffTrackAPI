@@ -97,6 +97,27 @@ function setupAuthenticatedSocket(server) {
           });
         }
 
+        // Check if users are already friends
+        const friends = await db.getFriends(userId);
+        if (friends.some((friend) => friend.id === data.friendId)) {
+          return socket.emit("error", {
+            message: "You are already friends with this user",
+          });
+        }
+
+        // Check if a friend request already exists between these users
+        const existingRequests = await db.getFriendRequests(userId);
+        const sentRequests = await db.getSentFriendRequests(userId);
+        if (
+          existingRequests.some((req) => req.UserId === data.friendId) ||
+          sentRequests.some((req) => req.FriendId === data.friendId)
+        ) {
+          return socket.emit("error", {
+            message:
+              "A friend request already exists between you and this user",
+          });
+        }
+
         await db.sendFriendRequest(userId, data.friendId);
 
         socket.emit("update", { sync: await db.getFullSync(userId) });
@@ -254,6 +275,13 @@ function setupAuthenticatedSocket(server) {
             });
           }
         }
+      }),
+    );
+    socket.on(
+      "getPuffCount",
+      wrapWithRateLimit(async (data) => {
+        const userId = socketmanager.getUserId(socket);
+        socket.emit("puffCount", { puffCount: await db.getPuffCount(userId) });
       }),
     );
 
