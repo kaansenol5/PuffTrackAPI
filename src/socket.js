@@ -2,6 +2,7 @@ const socketIo = require("socket.io");
 const jwt = require("jsonwebtoken");
 const socketmanager = require("./socketmanager");
 const db = require("./db");
+const schemas = require("./validation");
 
 function setupAuthenticatedSocket(server, jwtSecret) {
   const io = socketIo(server);
@@ -66,11 +67,21 @@ function setupAuthenticatedSocket(server, jwtSecret) {
       }
 
       const userId = await socketmanager.getUserId(socket);
-      await db.sendFriendRequest(userId, data.friendId);
-      if (userId == data.friendId) {
-        socket.emit("error", { message: "Cannot add yourself as a friend" });
-        return;
+
+      // Check if the friend ID exists
+      const friendExists = await db.userExists(data.friendId);
+      if (!friendExists) {
+        return socket.emit("error", { message: "Friend ID does not exist" });
       }
+
+      if (userId == data.friendId) {
+        return socket.emit("error", {
+          message: "Cannot add yourself as a friend",
+        });
+      }
+
+      await db.sendFriendRequest(userId, data.friendId);
+
       socket.emit("update", { sync: await db.getFullSync(userId) });
       let friendSocket = await socketmanager.getUserSocket(data.friendId);
       if (friendSocket != undefined) {
@@ -97,6 +108,92 @@ function setupAuthenticatedSocket(server, jwtSecret) {
       if (senderSocket != undefined) {
         senderSocket.emit("update", {
           sync: await db.getFullSync(socketmanager.getUserId(senderSocket)),
+        });
+      }
+    });
+
+    socket.on("cancelRequest", async (data) => {
+      const { error } = schemas.cancelRequest.validate(data);
+      if (error) {
+        return socket.emit("error", { message: error.details[0].message });
+      }
+
+      try {
+        const userId = await socketmanager.getUserId(socket);
+        const request = await db.getFriendRequestById(data.requestId);
+
+        if (!request) {
+          return socket.emit("error", { message: "Friend request not found" });
+        }
+
+        if (request.UserId !== userId) {
+          return socket.emit("error", {
+            message: "Unauthorized to cancel this request",
+          });
+        }
+
+        await db.deleteFriendRequest(data.requestId);
+
+        // Update the current user (sender)
+        socket.emit("update", { sync: await db.getFullSync(userId) });
+
+        // Update the receiver of the request
+        const receiverSocket = await socketmanager.getUserSocket(
+          request.FriendId,
+        );
+        if (receiverSocket) {
+          receiverSocket.emit("update", {
+            sync: await db.getFullSync(request.FriendId),
+          });
+        }
+
+        socket.emit("requestCancelled", { requestId: data.requestId });
+      } catch (error) {
+        console.error("Error cancelling friend request:", error);
+        socket.emit("error", {
+          message: "An error occurred while cancelling the friend request",
+        });
+      }
+    });
+
+    socket.on("rejectRequest", async (data) => {
+      const { error } = schemas.rejectRequest.validate(data);
+      if (error) {
+        return socket.emit("error", { message: error.details[0].message });
+      }
+
+      try {
+        const userId = await socketmanager.getUserId(socket);
+        const request = await db.getFriendRequestById(data.requestId);
+
+        if (!request) {
+          return socket.emit("error", { message: "Friend request not found" });
+        }
+
+        if (request.FriendId !== userId) {
+          return socket.emit("error", {
+            message: "Unauthorized to reject this request",
+          });
+        }
+
+        await db.deleteFriendRequest(data.requestId);
+
+        // Update the current user
+        socket.emit("update", { sync: await db.getFullSync(userId) });
+
+        // Update the sender of the request
+        const senderSocket = await socketmanager.getUserSocket(request.UserId);
+        if (senderSocket) {
+          senderSocket.emit("update", {
+            sync: await db.getFullSync(request.UserId),
+          });
+        }
+
+        socket.emit("requestRejected", { requestId: data.requestId });
+      } catch (error) {
+        console.error("Error rejecting friend request:", error);
+        socket.emit("error", {
+          message: "An error occurred while rejecting the friend request",
         });
       }
     });

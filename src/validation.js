@@ -23,6 +23,13 @@ const schemas = {
   addPuffs: Joi.object({
     puffs: Joi.array().items(Joi.number().integer().min(0)).min(1).required(),
   }),
+  rejectRequest: Joi.object({
+    requestId: Joi.string().length(6).required(),
+  }),
+
+  cancelRequest: Joi.object({
+    requestId: Joi.string().length(6).required(),
+  }),
 };
 
 module.exports = schemas;

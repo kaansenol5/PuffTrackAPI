@@ -166,6 +166,28 @@ const db = {
     }
   },
 
+  async getFriendRequestById(requestId) {
+    try {
+      const request = await FriendRequest.findByPk(requestId);
+      return request;
+    } catch (error) {
+      console.error("Error getting friend request:", error);
+      throw error;
+    }
+  },
+
+  async deleteFriendRequest(requestId) {
+    try {
+      const result = await FriendRequest.destroy({
+        where: { id: requestId },
+      });
+      return result > 0;
+    } catch (error) {
+      console.error("Error deleting friend request:", error);
+      throw error;
+    }
+  },
+
   async getFriendsPuffSummaries(userId) {
     try {
       const friends = await this.getFriends(userId);
