@@ -6,7 +6,7 @@ const schemas = require("./validation");
 
 const SocketRateLimiter = require("./socketRateLimiter");
 
-function setupAuthenticatedSocket(server, jwtSecret) {
+function setupAuthenticatedSocket(server) {
   const io = socketIo(server);
   const socketRateLimiter = new SocketRateLimiter(15 * 60 * 1000, 100); // 100 events per 15 minutes
 
@@ -34,7 +34,7 @@ function setupAuthenticatedSocket(server, jwtSecret) {
     if (token) {
       try {
         const decoded = await new Promise((resolve, reject) => {
-          jwt.verify(token, jwtSecret, (err, decoded) => {
+          jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
             if (err) reject(err);
             else resolve(decoded);
           });

@@ -4,9 +4,9 @@ const { customAlphabet } = require("nanoid");
 
 const nanoid = customAlphabet("1234567890abcdefhjkmnpqrstuvwxyz", 6);
 
-const sequelize = new Sequelize("pufftrack", "kaansenol", null, {
-  host: "localhost",
+const sequelize = new Sequelize(process.env.DATABASE_URL, {
   dialect: "postgres",
+  // You can add additional options here if needed
 });
 
 const User = sequelize.define("User", {

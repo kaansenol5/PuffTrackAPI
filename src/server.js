@@ -9,6 +9,7 @@ const app = express();
 const server = http.createServer(app);
 
 const setupAuthenticatedSocket = require("./socket");
+require("dotenv").config();
 
 const routes = require("./routes");
 const socketIo = require("socket.io");
@@ -29,9 +30,9 @@ app.use(apiLimiter);
 app.use(express.json());
 db.init();
 
-const jwt_secret = "secret";
+const jwt_secret = process.env.JWT_SECRET;
 
-const io = setupAuthenticatedSocket(server, jwt_secret);
+const io = setupAuthenticatedSocket(server);
 
 app.use("/", routes);
 

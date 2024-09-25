@@ -13,7 +13,9 @@ router.post("/register", validate(schemas.registration), async (req, res) => {
   try {
     const { name, email, password } = req.body;
     const user = await db.createUser(name, email, password);
-    const token = jwt.sign({ id: user.id }, "secret", { expiresIn: "1d" });
+    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
+      expiresIn: "30d",
+    });
     res.status(201).send({ user, token });
   } catch (error) {
     res.status(400).send(error);
@@ -26,7 +28,9 @@ router.post("/login", validate(schemas.login), async (req, res) => {
     const { email, password } = req.body;
     const user = await db.login(email, password);
     if (user) {
-      const token = jwt.sign({ id: user.id }, "secret", { expiresIn: "1d" });
+      const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
+        expiresIn: "30d",
+      });
       res.send({ user, token });
     } else {
       res.status(400).send("Invalid login");
