@@ -21,7 +21,7 @@ const User = sequelize.define("User", {
 
 const Puff = sequelize.define("Puff", {
   id: {
-    type: DataTypes.STRING(6),
+    type: DataTypes.UUID,
     primaryKey: true,
   },
   timestamp: { type: DataTypes.DATE, allowNull: false },
@@ -106,6 +106,15 @@ const db = {
       throw error;
     }
   },
+  async getPuffById(puffId) {
+    try {
+      const puff = await Puff.findByPk(puffId);
+      return puff;
+    } catch (error) {
+      console.error("Error getting puff:", error);
+      throw error;
+    }
+  },
 
   async updateUser(userId, updates) {
     try {
@@ -138,9 +147,8 @@ const db = {
   },
 
   // Puff functions
-  async addPuff(userId, timestamp) {
+  async addPuff(userId, puffId, timestamp) {
     try {
-      const puffId = await generateUniqueId(Puff);
       const puff = await Puff.create({
         id: puffId,
         UserId: userId,

@@ -21,8 +21,18 @@ const schemas = {
   }),
 
   addPuffs: Joi.object({
-    puffs: Joi.array().items(Joi.number().integer().min(0)).min(1).required(),
+    puffs: Joi.array()
+      .items(
+        Joi.object({
+          id: Joi.string().guid({ version: "uuidv4" }).required(),
+          timestamp: Joi.number().integer().min(0).required(), // Unix seconds timestamp
+          isSynced: Joi.boolean().required(),
+        }),
+      )
+      .min(1)
+      .required(),
   }),
+
   rejectRequest: Joi.object({
     requestId: Joi.string().length(6).required(),
   }),

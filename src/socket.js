@@ -282,12 +282,25 @@ function setupAuthenticatedSocket(server) {
         }
 
         console.log("adding puffs");
-        const puffs = data.puffs;
+
+        const puffs = data.puffs; // puffs = [{id, timestamp, isSynced}]
         const userId = await socketmanager.getUserId(socket);
-        for (let timestamp of puffs) {
-          await db.addPuff(userId, new Date(timestamp * 1000));
+
+        const syncedPuffIds = [];
+
+        for (let puff of puffs) {
+          // Check if the puff already exists in the database
+          const existingPuff = await db.getPuffById(puff.id);
+          if (!existingPuff) {
+            await db.addPuff(userId, puff.id, new Date(puff.timestamp * 1000));
+            syncedPuffIds.push(puff.id);
+          } else {
+            console.log(`Puff ${puff.id} already exists, ignoring.`);
+          }
         }
+
         const userFriends = await db.getFriends(userId);
+
         for (let user of userFriends) {
           const socketId = await socketmanager.getUserSocket(user.id);
           if (socketId != undefined) {
@@ -296,8 +309,12 @@ function setupAuthenticatedSocket(server) {
             });
           }
         }
+
+        // Emit back only the ids of synced puffs
+        socket.emit("syncedPuffIds", { syncedPuffIds: syncedPuffIds });
       }),
     );
+
     socket.on(
       "getPuffCount",
       wrapWithRateLimit(async (data) => {
