@@ -20,7 +20,7 @@ class SocketManager {
     SocketManager.userSocketMap.set(userId, socket);
     SocketManager.socketUserMap.set(socket, userId);
 
-    console.log(`User ${userId} connected`);
+    // console.log(`User ${userId} connected`);
 
     // Set up disconnect handler
     socket.on("disconnect", () => SocketManager.handleDisconnection(socket));
@@ -31,7 +31,7 @@ class SocketManager {
     if (userId) {
       SocketManager.userSocketMap.delete(userId);
       SocketManager.socketUserMap.delete(socket);
-      console.log(`User ${userId} disconnected`);
+      //  console.log(`User ${userId} disconnected`);
     }
   }
 

@@ -19,7 +19,7 @@ router.post("/register", validate(schemas.registration), async (req, res) => {
     res.status(201).send({ user, token });
   } catch (error) {
     res.status(400).send(error);
-    console.log("emitted error");
+    //   console.log("emitted error");
   }
 });
 
@@ -40,9 +40,6 @@ router.post("/login", validate(schemas.login), async (req, res) => {
   }
 });
 
-router.get("/debug", async (req, res) => {
-  res.status(200).send({ db: await db.dumpDatabase() });
-});
 router.post("/ping", auth, async (req, res) => {
   res.status(200).send({ status: "pong" });
 });

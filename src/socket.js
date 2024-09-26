@@ -15,14 +15,14 @@ function setupAuthenticatedSocket(server) {
     const originalEmit = socket.emit;
 
     socket.emit = function (eventName, ...args) {
-      console.log(`[${new Date().toISOString()}] Emitting event: ${eventName}`);
-      console.log("Event data:", JSON.stringify(args, null, 2));
+      //    console.log(`[${new Date().toISOString()}] Emitting event: ${eventName}`);
+      //    console.log("Event data:", JSON.stringify(args, null, 2));
       originalEmit.apply(this, [eventName, ...args]);
     };
 
     socket.onAny((eventName, ...args) => {
-      console.log(`[${new Date().toISOString()}] Received event: ${eventName}`);
-      console.log("Event data:", JSON.stringify(args, null, 2));
+      //  console.log(`[${new Date().toISOString()}] Received event: ${eventName}`);
+      //  console.log("Event data:", JSON.stringify(args, null, 2));
     });
 
     next();
@@ -70,7 +70,7 @@ function setupAuthenticatedSocket(server) {
       };
     };
 
-    console.log("Authenticated user connected. User ID:", socket.userId);
+    // console.log("Authenticated user connected. User ID:", socket.userId);
     let sync = await db.getFullSync(socket.userId);
     socket.emit("update", { sync: sync });
     socketmanager.handleConnection(socket, socket.userId);
@@ -123,7 +123,7 @@ function setupAuthenticatedSocket(server) {
         socket.emit("update", { sync: await db.getFullSync(userId) });
         let friendSocket = await socketmanager.getUserSocket(data.friendId);
         if (friendSocket != undefined) {
-          console.log("updating user");
+          //  console.log("updating user");
           friendSocket.emit("update", {
             sync: await db.getFullSync(data.friendId),
           });
@@ -163,7 +163,7 @@ function setupAuthenticatedSocket(server) {
         await db.acceptFriendRequest(data.requestId);
         const sender = await db.getFriendRequestSender(data.requestId);
         const senderSocket = await socketmanager.getUserSocket(sender.id);
-        console.log("updating");
+        // console.log("updating");
         socket.emit("update", {
           sync: await db.getFullSync(socketmanager.getUserId(socket)),
         });
@@ -281,7 +281,7 @@ function setupAuthenticatedSocket(server) {
           return socket.emit("error", { message: error.details[0].message });
         }
 
-        console.log("adding puffs");
+        //    console.log("adding puffs");
 
         const puffs = data.puffs; // puffs = [{id, timestamp, isSynced}]
         const userId = await socketmanager.getUserId(socket);
@@ -295,7 +295,7 @@ function setupAuthenticatedSocket(server) {
             await db.addPuff(userId, puff.id, new Date(puff.timestamp * 1000));
             syncedPuffIds.push(puff.id);
           } else {
-            console.log(`Puff ${puff.id} already exists, ignoring.`);
+            //      console.log(`Puff ${puff.id} already exists, ignoring.`);
           }
         }
 
@@ -324,7 +324,7 @@ function setupAuthenticatedSocket(server) {
     );
 
     socket.on("disconnect", () => {
-      console.log("User disconnected. User ID:", socket.userId);
+      // console.log("User disconnected. User ID:", socket.userId);
       socketmanager.handleDisconnection(socket);
     });
   });

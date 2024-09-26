@@ -88,7 +88,7 @@ const db = {
     try {
       const user = await User.findByPk(userId);
       if (!user) {
-        console.log(userId + " does not exist");
+        //console.log(userId + " does not exist");
       }
       return !!user; // Returns true if user exists, false otherwise
     } catch (error) {
@@ -355,7 +355,7 @@ const db = {
       const request = await FriendRequest.findByPk(requestId);
       if (request) {
         await request.update({ status: "accepted" });
-        console.log("accepted request");
+        //  console.log("accepted request");
         return request;
       }
       return null;
@@ -527,7 +527,7 @@ const db = {
             }
           : null,
       }));
-      console.log("FULL UPDATE " + user.id);
+      //     console.log("FULL UPDATE " + user.id);
       // Build the response
       return {
         user: {
