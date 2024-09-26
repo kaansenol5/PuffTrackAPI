@@ -10,6 +10,7 @@ const server = http.createServer(app);
 
 const setupAuthenticatedSocket = require("./socket");
 require("dotenv").config();
+app.set("trust proxy", 1); // Number represents the number of proxies to trust
 
 const routes = require("./routes");
 const socketIo = require("socket.io");
