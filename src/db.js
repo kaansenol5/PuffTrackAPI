@@ -15,8 +15,9 @@ const User = sequelize.define("User", {
     primaryKey: true,
   },
   name: { type: DataTypes.STRING, allowNull: false },
-  email: { type: DataTypes.STRING, allowNull: false, unique: true },
-  password: { type: DataTypes.STRING, allowNull: false },
+  email: { type: DataTypes.STRING, allowNull: true, unique: true },
+  password: { type: DataTypes.STRING, allowNull: true },
+  appleId: { type: DataTypes.STRING, allowNull: true, unique: true }, // New field
 });
 
 const Puff = sequelize.define("Puff", {
@@ -77,6 +78,7 @@ const db = {
         name,
         email,
         password: hashedPassword,
+        appleId: null, // Explicitly set to null for email/password users
       });
       return user;
     } catch (error) {
@@ -84,6 +86,34 @@ const db = {
       throw error;
     }
   },
+
+  async getUserByAppleId(appleId) {
+    try {
+      const user = await User.findOne({ where: { appleId } });
+      return user;
+    } catch (error) {
+      console.error("Error getting user by Apple ID:", error);
+      throw error;
+    }
+  },
+
+  async createUserWithAppleId({ appleId, email, name }) {
+    try {
+      const userId = await generateUniqueId(User);
+      const user = await User.create({
+        id: userId,
+        name: name || "Unknown",
+        email: email || null,
+        password: null, // No password for Apple sign-in users
+        appleId,
+      });
+      return user;
+    } catch (error) {
+      console.error("Error creating user with Apple ID:", error);
+      throw error;
+    }
+  },
+
   async userExists(userId) {
     try {
       const user = await User.findByPk(userId);
@@ -598,7 +628,7 @@ const db = {
     try {
       await sequelize.authenticate();
       console.log("Database connection established successfully.");
-      await sequelize.sync({});
+      await sequelize.sync({ force: true });
       console.log("Database synchronized successfully.");
     } catch (error) {
       console.error("Unable to connect to the database:", error);
