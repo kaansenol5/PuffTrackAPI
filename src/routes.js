@@ -98,6 +98,34 @@ router.post("/register", validate(schemas.registration), async (req, res) => {
   }
 });
 
+router.get("/userData", auth, async (req, res) => {
+  const userId = req.user.id; // Assuming you have middleware that sets req.user
+  console.log("Aaaaaaaaaa");
+  try {
+    const userData = await db.getUserData(userId);
+    res.json(userData);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to retrieve user data" });
+  }
+});
+router.delete("/deleteUser", auth, async (req, res) => {
+  console.log("bbbbbbbbb");
+  const userId = req.user.id; // Assuming you have middleware that sets req.user
+
+  try {
+    const success = await db.deleteUserData(userId);
+    if (success) {
+      res.json({
+        message: "Your account and data have been deleted successfully.",
+      });
+    } else {
+      res.status(404).json({ error: "User not found." });
+    }
+  } catch (error) {
+    res.status(500).json({ error: "Failed to delete user data" });
+  }
+});
+
 router.post("/login", validate(schemas.login), async (req, res) => {
   try {
     const { email, password } = req.body;

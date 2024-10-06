@@ -1,6 +1,7 @@
 const { Sequelize, DataTypes, Op } = require("sequelize");
 const bcrypt = require("bcryptjs");
 const { customAlphabet } = require("nanoid");
+const schedule = require("node-schedule");
 
 const nanoid = customAlphabet("1234567890abcdefhjkmnpqrstuvwxyz", 6);
 
@@ -413,6 +414,90 @@ const db = {
       throw error;
     }
   },
+  async deleteUserData(userId) {
+    try {
+      // Delete puffs
+      await Puff.destroy({
+        where: { UserId: userId },
+      });
+
+      // Delete friend requests where the user is the sender or receiver
+      await FriendRequest.destroy({
+        where: {
+          [Op.or]: [{ UserId: userId }, { FriendId: userId }],
+        },
+      });
+
+      // Delete the user
+      const result = await User.destroy({
+        where: { id: userId },
+      });
+
+      return result > 0;
+    } catch (error) {
+      console.error("Error deleting user data:", error);
+      throw error;
+    }
+  },
+  async getUserData(userId) {
+    try {
+      // Fetch user details excluding the password
+      const user = await User.findByPk(userId, {
+        attributes: { exclude: ["password"] },
+        raw: true,
+      });
+
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      // Fetch user's puffs
+      const puffs = await Puff.findAll({
+        where: { UserId: userId },
+        order: [["timestamp", "DESC"]],
+        raw: true,
+      });
+
+      // Fetch friend requests sent by the user
+      const sentFriendRequests = await FriendRequest.findAll({
+        where: { UserId: userId },
+        include: [
+          {
+            model: User,
+            as: "Receiver",
+            attributes: ["id", "name", "email"],
+          },
+        ],
+        raw: true,
+      });
+
+      // Fetch friend requests received by the user
+      const receivedFriendRequests = await FriendRequest.findAll({
+        where: { FriendId: userId },
+        include: [
+          {
+            model: User,
+            as: "Sender",
+            attributes: ["id", "name", "email"],
+          },
+        ],
+        raw: true,
+      });
+
+      // Compile all data into one object
+      const userData = {
+        user,
+        puffs,
+        sentFriendRequests,
+        receivedFriendRequests,
+      };
+
+      return userData;
+    } catch (error) {
+      console.error("Error accessing user data:", error);
+      throw error;
+    }
+  },
 
   async getFriendRequestReceiver(requestId) {
     try {
@@ -628,8 +713,25 @@ const db = {
     try {
       await sequelize.authenticate();
       console.log("Database connection established successfully.");
-      await sequelize.sync({ force: true });
+      await sequelize.sync({});
       console.log("Database synchronized successfully.");
+      schedule.scheduleJob("0 0 * * *", async function () {
+        try {
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+          await Puff.destroy({
+            where: {
+              timestamp: {
+                [Op.lt]: thirtyDaysAgo,
+              },
+            },
+          });
+          console.log("Old puffs cleaned up successfully.");
+        } catch (error) {
+          console.error("Error during scheduled puff cleanup:", error);
+        }
+      });
     } catch (error) {
       console.error("Unable to connect to the database:", error);
     }

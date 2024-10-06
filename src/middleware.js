@@ -8,7 +8,7 @@ const auth = async (req, res, next) => {
     const token = req.header("Authorization").replace("Bearer ", "");
     let decoded;
     try {
-      decoded = jwt.verify(token, "secret");
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
     } catch (e) {
       if (e instanceof jwt.TokenExpiredError) {
         return res.status(401).send({ error: "Token expired" });
