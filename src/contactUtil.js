@@ -2,7 +2,7 @@
 const fs = require("fs").promises;
 const path = require("path");
 
-const CONTACTS_FILE = path.join(__dirname, "data", "contacts.json");
+const CONTACTS_FILE = path.join(__dirname, "../data", "contacts.json");
 
 // Ensure the data directory exists
 async function ensureDataDirectory() {
