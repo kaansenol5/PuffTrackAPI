@@ -109,7 +109,6 @@ router.get("/userData", auth, async (req, res) => {
   }
 });
 router.delete("/deleteUser", auth, async (req, res) => {
-  console.log("bbbbbbbbb");
   const userId = req.user.id; // Assuming you have middleware that sets req.user
 
   try {
@@ -125,7 +124,53 @@ router.delete("/deleteUser", auth, async (req, res) => {
     res.status(500).json({ error: "Failed to delete user data" });
   }
 });
+router.patch(
+  "/user/name",
+  auth,
+  validate(schemas.changeName),
+  async (req, res) => {
+    try {
+      const userId = req.user.id;
+      const { newName } = req.body;
 
+      const updatedUser = await db.changeName(userId, newName);
+
+      res.status(200).send({
+        message: "Name updated successfully",
+        user: updatedUser,
+      });
+    } catch (error) {
+      console.error("Error in name change route:", error);
+
+      if (error.message === "User not found") {
+        return res.status(404).send({ error: "User not found" });
+      }
+
+      if (error.message.includes("Name must be")) {
+        return res.status(400).send({ error: error.message });
+      }
+
+      res.status(500).send({ error: "Failed to update name" });
+    }
+  },
+);
+router.delete("/puffs", auth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const result = await db.removeAllPuffs(userId);
+
+    if (result > 0) {
+      res
+        .status(200)
+        .send({ message: "All puffs deleted successfully", count: result });
+    } else {
+      res.status(200).send({ message: "No puffs to delete", count: 0 });
+    }
+  } catch (error) {
+    console.error("Error deleting all puffs:", error);
+    res.status(500).send({ error: "Failed to delete puffs" });
+  }
+});
 router.post("/login", validate(schemas.login), async (req, res) => {
   try {
     const { email, password } = req.body;

@@ -97,6 +97,34 @@ const db = {
       throw error;
     }
   },
+  async changeName(userId, newName) {
+    try {
+      // Input validation
+      if (!newName || typeof newName !== "string") {
+        throw new Error("Invalid name provided");
+      }
+
+      if (newName.length < 2 || newName.length > 30) {
+        throw new Error("Name must be between 2 and 30 characters");
+      }
+
+      // Find the user
+      const user = await User.findByPk(userId);
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      // Update the name
+      await user.update({ name: newName });
+
+      // Return the updated user without sensitive information
+      const { password, ...updatedUser } = user.get({ plain: true });
+      return updatedUser;
+    } catch (error) {
+      console.error("Error changing user name:", error);
+      throw error;
+    }
+  },
 
   async createUserWithAppleId({ appleId, email, name }) {
     try {

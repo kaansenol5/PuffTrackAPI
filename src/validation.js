@@ -19,7 +19,9 @@ const schemas = {
   acceptRequest: Joi.object({
     requestId: Joi.string().length(6).required(),
   }),
-
+  changeName: Joi.object({
+    newName: Joi.string().min(2).max(30).required(),
+  }),
   addPuffs: Joi.object({
     puffs: Joi.array()
       .items(
