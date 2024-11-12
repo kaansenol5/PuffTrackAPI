@@ -7,6 +7,19 @@ const jwksClient = require("jwks-rsa");
 
 const schemas = require("./validation");
 
+const rateLimit = require("express-rate-limit");
+const { saveContact } = require("./contactUtil");
+
+// Create a specific rate limiter for the contact form
+const contactLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour window
+  max: 5, // limit each IP to 5 requests per windowMs
+  message:
+    "Too many contact requests from this IP, please try again after an hour",
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 router.get("/", (req, res) => {
   res.send("PuffTrack API");
 });
@@ -27,6 +40,35 @@ function getAppleKey(header, callback) {
     }
   });
 }
+
+router.post(
+  "/contact",
+  contactLimiter,
+  validate(schemas.contact),
+  async (req, res) => {
+    try {
+      const { name, email, message } = req.body;
+
+      const saved = await saveContact(name, email, message);
+
+      if (!saved) {
+        return res.status(500).json({
+          error:
+            "Failed to save contact form submission. Please try again later.",
+        });
+      }
+
+      res.status(200).json({
+        message: "Thank you for your message. We will get back to you soon.",
+      });
+    } catch (error) {
+      console.error("Contact form error:", error);
+      res.status(500).json({
+        error: "An unexpected error occurred. Please try again later.",
+      });
+    }
+  },
+);
 
 router.post("/apple-signin", async (req, res) => {
   try {

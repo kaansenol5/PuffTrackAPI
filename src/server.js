@@ -1,4 +1,5 @@
 const express = require("express");
+const cors = require("cors"); // Add this line
 
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -11,6 +12,13 @@ const server = http.createServer(app);
 const setupAuthenticatedSocket = require("./socket");
 require("dotenv").config();
 app.set("trust proxy", 1); // Number represents the number of proxies to trust
+app.use(
+  cors({
+    origin: "http://localhost:3001", // Your React app's URL
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type"],
+  }),
+);
 
 const routes = require("./routes");
 const socketIo = require("socket.io");
