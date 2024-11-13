@@ -114,7 +114,7 @@ router.post("/apple-signin", async (req, res) => {
         console.log(user);
         // Generate your own JWT token
         const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
-          expiresIn: "2m",
+          expiresIn: "30d",
         });
         console.log("issued token");
         res.send({ user, token });
