@@ -14,7 +14,7 @@ require("dotenv").config();
 app.set("trust proxy", 1); // Number represents the number of proxies to trust
 app.use(
   cors({
-    origin: "http://localhost:3001", // Your React app's URL
+    origin: "https://pufftrack.app", // Your React app's URL
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type"],
   }),
